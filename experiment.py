@@ -7,13 +7,23 @@ fis_client = boto3.client('fis')
 
 # Function to get the list of FIS experiments
 def get_fis_experiments():
-    experiments = []
-    paginator = fis_client.get_paginator('list_experiments')
+    response = fis_client.list_experiments()
+    return response.get('experiments', [])
+
+# Function to extract experiment details excluding targets and actions
+def extract_experiment_details(experiments):
+    experiment_details = []
     
-    for page in paginator.paginate():
-        experiments.extend(page['experiments'])
+    for experiment in experiments:
+        experiment_details.append({
+            'experimentId': experiment['id'],
+            'description': experiment.get('description', ''),
+            'state': experiment.get('state', {}).get('status', ''),
+            'creationTime': experiment.get('creationTime', ''),
+            'tags': json.dumps(experiment.get('tags', {}))
+        })
     
-    return experiments
+    return experiment_details
 
 # Function to extract actions and targets from the experiments list
 def extract_actions_targets_from_experiments(experiments):
@@ -21,8 +31,6 @@ def extract_actions_targets_from_experiments(experiments):
     
     for experiment in experiments:
         experiment_id = experiment['id']
-        description = experiment.get('description', '')
-        state = experiment.get('state', {}).get('status', '')
         
         # Get experiment details to fetch actions and targets
         experiment_details = fis_client.get_experiment(experimentId=experiment_id)
@@ -40,8 +48,6 @@ def extract_actions_targets_from_experiments(experiments):
                 
                 actions_targets_data.append({
                     'experimentId': experiment_id,
-                    'description': description,
-                    'state': state,
                     'actionName': action_name,
                     'actionId': action_id,
                     'actionParameters': action_parameters,
@@ -57,17 +63,24 @@ def extract_actions_targets_from_experiments(experiments):
     
     return actions_targets_data
 
-# Function to convert the extracted data to a CSV file
-def convert_to_csv(data, filename='fis_actions_targets.csv'):
-    df = pd.DataFrame(data)
-    df.to_csv(filename, index=False)
-    print(f"CSV file '{filename}' created successfully.")
+# Function to convert the extracted data to CSV files
+def convert_to_csv(experiment_data, actions_targets_data, experiment_filename='fis_experiments.csv', actions_targets_filename='fis_actions_targets.csv'):
+    experiment_df = pd.DataFrame(experiment_data)
+    experiment_df.to_csv(experiment_filename, index=False)
+    
+    actions_targets_df = pd.DataFrame(actions_targets_data)
+    actions_targets_df.to_csv(actions_targets_filename, index=False)
+    
+    print(f"CSV files '{experiment_filename}' and '{actions_targets_filename}' created successfully.")
 
 # Get the list of FIS experiments
 experiments = get_fis_experiments()
 
+# Extract the experiment details excluding targets and actions
+experiment_data = extract_experiment_details(experiments)
+
 # Extract the actions and targets data from the experiments list
 actions_targets_data = extract_actions_targets_from_experiments(experiments)
 
-# Convert the actions and targets data to a CSV file
-convert_to_csv(actions_targets_data)
+# Convert the extracted data to CSV files
+convert_to_csv(experiment_data, actions_targets_data)
